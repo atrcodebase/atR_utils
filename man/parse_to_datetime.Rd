@@ -8,7 +8,8 @@ parse_to_datetime(
   date_vector,
   dayfirst = "auto",
   timezone = "UTC",
-  quiet = FALSE
+  quiet = FALSE,
+  report_max = 10
 )
 }
 \arguments{
@@ -26,12 +27,20 @@ the section below.}
 attribute, which changes how the instants display but not which instants
 they are.}
 
-\item{quiet}{Logical. When \code{FALSE} (the default), emit a warning naming the
-number of unparsed values and up to five examples.}
+\item{quiet}{Logical. When \code{FALSE} (the default), emit a warning listing the
+values that could not be parsed, how often each occurred and where.}
+
+\item{report_max}{Maximum number of \emph{distinct} unparsed values to list in
+that warning; the remainder are counted in a trailing line. Use \code{Inf} to
+list every one. The \code{"unparsed"} attribute on the result is never
+truncated.}
 }
 \value{
 A \code{POSIXct} vector the same length as \code{date_vector}, carrying its
-names, with \code{NA} wherever parsing failed.
+names, with \code{NA} wherever parsing failed. When some values failed, the
+result also carries an \code{"unparsed"} attribute: a data frame with one row
+per distinct unrecognised value and columns \code{value}, \code{count} and \code{index}
+(a list column of positions in the input). See \code{\link[=unparsed_values]{unparsed_values()}}.
 }
 \description{
 Coerces a vector of mixed-format dates — the sort that accumulates in survey
@@ -43,7 +52,9 @@ numeric and month-name layouts with optional time of day.
 \details{
 Values are matched against fully anchored patterns, so a format is only
 applied when it accounts for the entire string. Anything unrecognised
-returns \code{NA} and is reported through a warning unless \code{quiet = TRUE}.
+returns \code{NA} and is reported: the offending values are listed in a warning
+(unless \code{quiet = TRUE}) and, either way, attached to the result as an
+\code{"unparsed"} attribute readable with \code{\link[=unparsed_values]{unparsed_values()}}.
 
 Resolution order is: compact \code{yyyymmdd}, then numeric, then ISO 8601, then
 JavaScript, then the format table. Within the format table, year-first
@@ -88,5 +99,9 @@ parse_to_datetime("01/02/2024", dayfirst = FALSE)  # 2 January
 
 # Excel serials and Unix epoch seconds
 parse_to_datetime(c("45000", "1704067200"))
+
+# Unparsed values are named in the warning and kept on the result
+x <- suppressWarnings(parse_to_datetime(c("2024-01-15", "n/a", "later", "n/a")))
+unparsed_values(x)
 
 }
