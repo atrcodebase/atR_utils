@@ -1,0 +1,7 @@
+^LICENSE\.md$
+^\.claude$
+^CLAUDE\.md$
+^\.DS_Store$
+^\.github$
+^.*\.Rproj$
+^\.Rproj\.user$

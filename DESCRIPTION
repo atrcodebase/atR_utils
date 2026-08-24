@@ -1,0 +1,22 @@
+Package: atRutils
+Title: Shared Data-Management Utilities for ATR Consulting
+Version: 0.0.0.9000
+Authors@R:
+    person("Khaibar", "Omari", , "khaibar.omari@atr-consulting.com", role = c("aut", "cre"))
+Description: A collection of data-management helpers used across ATR
+    Consulting projects. Provides tolerant parsing and cleaning routines for
+    the heterogeneous data that arrives from survey platforms, spreadsheets
+    and partner systems, starting with date and date-time coercion that
+    handles mixed formats, Excel serial numbers and Unix timestamps in a
+    single vector.
+License: MIT + file LICENSE
+Encoding: UTF-8
+Roxygen: list(markdown = TRUE)
+RoxygenNote: 7.3.3
+Depends:
+    R (>= 4.0)
+Imports:
+    lubridate
+Suggests:
+    testthat (>= 3.0.0)
+Config/testthat/edition: 3

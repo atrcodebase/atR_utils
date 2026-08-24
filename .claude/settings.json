@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd \"/Users/khaibaromari/ATR Team Dropbox/11 - DATA MANAGEMENT/atRutils\" && ls -a .cursor .github 2>/dev/null; cat .cursorrules .github/copilot-instructions.md CLAUDE.md 2>/dev/null; ls ~/.codex ./.codex ~/.gemini ./.gemini 2>/dev/null; ls GEMINI.md 2>/dev/null)",
+      "Read(//Users/khaibaromari/.codex/**)",
+      "Bash(Rscript -e 'cat\\(R.version.string, \"\\\\n\"\\); for \\(p in c\\(\"devtools\",\"roxygen2\",\"testthat\",\"lubridate\"\\)\\) cat\\(p, as.character\\(packageVersion\\(p\\)\\), \"\\\\n\"\\)')",
+      "Bash(Rscript -e *)",
+      "Bash(R CMD *)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git add:*)",
+      "Bash(ls:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Read(.env*)"
+    ],
+    "ask": [
+      "Bash(git push:*)"
+    ]
+  }
+}
