@@ -58,6 +58,55 @@ test_that("unparsed values raise a warning naming them", {
   expect_silent(parse_to_datetime("nope", quiet = TRUE))
 })
 
+test_that("the warning reports every distinct unparsed value, with counts and rows", {
+  w <- capture_warnings(parse_to_datetime(c("2024-01-15", "n/a", "later", "n/a")))
+  msg <- paste(w, collapse = "\n")
+  expect_match(msg, "3 of 4 value\\(s\\)")
+  expect_match(msg, "2 distinct unparsed value\\(s\\)")
+  expect_match(msg, '"n/a" \\(2 value\\(s\\); rows 2, 4\\)')
+  expect_match(msg, '"later" \\(1 value\\(s\\); row 3\\)')
+})
+
+test_that("report_max caps the listing but not the recorded table", {
+  x <- paste0("junk", 1:12)
+  w <- capture_warnings(r <- parse_to_datetime(x, report_max = 3))
+  msg <- paste(w, collapse = "\n")
+  expect_match(msg, "junk3")
+  expect_false(grepl("junk4", msg, fixed = TRUE))
+  expect_match(msg, "and 9 more distinct value\\(s\\)")
+  expect_equal(nrow(unparsed_values(r)), 12L)
+
+  w_all <- capture_warnings(parse_to_datetime(x, report_max = Inf))
+  expect_match(paste(w_all, collapse = "\n"), "junk12")
+})
+
+test_that("unparsed values are recorded on the result, quiet or not", {
+  r <- parse_to_datetime(c("2024-01-15", "n/a", "later", "n/a"), quiet = TRUE)
+  u <- unparsed_values(r)
+  expect_equal(u$value, c("n/a", "later"))
+  expect_equal(u$count, c(2L, 1L))
+  expect_equal(u$index, list(c(2L, 4L), 3L))
+  expect_true(all(is.na(r[unlist(u$index)])))
+
+  # Nothing to report leaves the result clean.
+  clean <- parse_to_datetime(c("2024-01-15", "2024-02-20"))
+  expect_null(attr(clean, "unparsed"))
+  expect_equal(nrow(unparsed_values(clean)), 0L)
+  expect_equal(nrow(unparsed_values(Sys.time())), 0L)
+})
+
+test_that("recorded values are trimmed, and blanks/NA are not counted as failures", {
+  r <- parse_to_datetime(c("  bad  ", "", "   ", NA, "2024-01-15"), quiet = TRUE)
+  u <- unparsed_values(r)
+  expect_equal(u$value, "bad")
+  expect_equal(u$index, list(1L))
+})
+
+test_that("report_max is validated", {
+  expect_error(parse_to_datetime("2024-01-15", report_max = 0), "report_max")
+  expect_error(parse_to_datetime("2024-01-15", report_max = "3"), "report_max")
+})
+
 test_that("trailing junk is rejected rather than silently truncated", {
   # Previously "2024-01-15xyz" parsed to 2024-01-15.
   expect_warning(r <- parse_to_datetime("2024-01-15xyz"))

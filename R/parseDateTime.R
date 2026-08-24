@@ -245,6 +245,55 @@
   res
 }
 
+# ── Internal: unparsed-value reporting ────────────────────────────────────────
+#
+# Failures are reported as data, not just as prose: one row per distinct
+# unrecognised string, with how often it occurred and where. The warning text
+# is a rendering of that table, capped so a wholly unparseable column does not
+# print thousands of lines.
+
+.unparsed_table <- function(original, failed) {
+  idx <- which(failed)
+  val <- trimws(original[idx])
+  lvl <- unique(val)
+  by  <- split(idx, factor(val, levels = lvl))
+
+  out <- data.frame(value = lvl, count = as.integer(lengths(by)),
+                    stringsAsFactors = FALSE)
+  out$index <- unname(by)   # list column: row positions in the input
+  out
+}
+
+.empty_unparsed <- function() {
+  out <- data.frame(value = character(0), count = integer(0),
+                    stringsAsFactors = FALSE)
+  out$index <- list()
+  out
+}
+
+.format_unparsed <- function(tbl, report_max) {
+  show <- if (is.finite(report_max)) min(report_max, nrow(tbl)) else nrow(tbl)
+  show <- max(as.integer(show), 1L)
+
+  lines <- vapply(seq_len(show), function(i) {
+    rows <- tbl$index[[i]]
+    shown_rows <- rows[seq_len(min(3L, length(rows)))]
+    rows_txt <- paste0(
+      if (length(rows) == 1L) "row " else "rows ",
+      paste(shown_rows, collapse = ", "),
+      if (length(rows) > length(shown_rows)) ", ..." else ""
+    )
+    sprintf('  "%s" (%d value(s); %s)', tbl$value[i], tbl$count[i], rows_txt)
+  }, character(1))
+
+  if (nrow(tbl) > show) {
+    lines <- c(lines, sprintf(
+      "  ... and %d more distinct value(s); see attr(x, \"unparsed\") or unparsed_values(x)",
+      nrow(tbl) - show))
+  }
+  paste(lines, collapse = "\n")
+}
+
 # ── Exported ──────────────────────────────────────────────────────────────────
 
 #' Parse heterogeneous date and date-time values to `POSIXct`
@@ -257,7 +306,9 @@
 #'
 #' Values are matched against fully anchored patterns, so a format is only
 #' applied when it accounts for the entire string. Anything unrecognised
-#' returns `NA` and is reported through a warning unless `quiet = TRUE`.
+#' returns `NA` and is reported: the offending values are listed in a warning
+#' (unless `quiet = TRUE`) and, either way, attached to the result as an
+#' `"unparsed"` attribute readable with [unparsed_values()].
 #'
 #' Resolution order is: compact `yyyymmdd`, then numeric, then ISO 8601, then
 #' JavaScript, then the format table. Within the format table, year-first
@@ -290,11 +341,18 @@
 #'   [OlsonNames()]. Parsing always happens in UTC; this sets the `tzone`
 #'   attribute, which changes how the instants display but not which instants
 #'   they are.
-#' @param quiet Logical. When `FALSE` (the default), emit a warning naming the
-#'   number of unparsed values and up to five examples.
+#' @param quiet Logical. When `FALSE` (the default), emit a warning listing the
+#'   values that could not be parsed, how often each occurred and where.
+#' @param report_max Maximum number of *distinct* unparsed values to list in
+#'   that warning; the remainder are counted in a trailing line. Use `Inf` to
+#'   list every one. The `"unparsed"` attribute on the result is never
+#'   truncated.
 #'
 #' @return A `POSIXct` vector the same length as `date_vector`, carrying its
-#'   names, with `NA` wherever parsing failed.
+#'   names, with `NA` wherever parsing failed. When some values failed, the
+#'   result also carries an `"unparsed"` attribute: a data frame with one row
+#'   per distinct unrecognised value and columns `value`, `count` and `index`
+#'   (a list column of positions in the input). See [unparsed_values()].
 #'
 #' @examples
 #' parse_to_datetime(c("2024-01-15", "15/01/2024", "15-Jan-2024", "20240115"))
@@ -318,11 +376,16 @@
 #' # Excel serials and Unix epoch seconds
 #' parse_to_datetime(c("45000", "1704067200"))
 #'
+#' # Unparsed values are named in the warning and kept on the result
+#' x <- suppressWarnings(parse_to_datetime(c("2024-01-15", "n/a", "later", "n/a")))
+#' unparsed_values(x)
+#'
 #' @export
 parse_to_datetime <- function(date_vector,
-                              dayfirst = "auto",
-                              timezone = "UTC",
-                              quiet    = FALSE) {
+                              dayfirst   = "auto",
+                              timezone   = "UTC",
+                              quiet      = FALSE,
+                              report_max = 10) {
 
   if (!is.character(timezone) || length(timezone) != 1L || is.na(timezone)) {
     stop("`timezone` must be a single non-NA character string.", call. = FALSE)
@@ -336,6 +399,10 @@ parse_to_datetime <- function(date_vector,
   }
   if (!is.logical(quiet) || length(quiet) != 1L || is.na(quiet)) {
     stop("`quiet` must be TRUE or FALSE.", call. = FALSE)
+  }
+  if (!is.numeric(report_max) || length(report_max) != 1L ||
+      is.na(report_max) || report_max < 1) {
+    stop("`report_max` must be a single number >= 1 (or Inf).", call. = FALSE)
   }
 
   nm <- names(date_vector)
@@ -383,14 +450,48 @@ parse_to_datetime <- function(date_vector,
   }
 
   failed <- is.na(result) & !is.na(original) & nzchar(trimws(original))
-  if (!quiet && any(failed)) {
-    ex <- unique(trimws(original[failed]))
-    ex <- ex[seq_len(min(5L, length(ex)))]
-    warning(sprintf(
-      "parse_to_datetime(): %d of %d value(s) could not be parsed and became NA. Unparsed: %s",
-      sum(failed), n, paste0("\"", ex, "\"", collapse = ", ")
-    ), call. = FALSE)
+  result <- finish(result)
+
+  if (any(failed)) {
+    tbl <- .unparsed_table(original, failed)
+    # Carried on the result even when quiet, so callers that suppress the
+    # warning can still see exactly what was dropped.
+    attr(result, "unparsed") <- tbl
+
+    if (!quiet) {
+      warning(sprintf(
+        "parse_to_datetime(): %d of %d value(s) could not be parsed and became NA.\n%d distinct unparsed value(s):\n%s",
+        sum(failed), n, nrow(tbl), .format_unparsed(tbl, report_max)
+      ), call. = FALSE)
+    }
   }
 
-  finish(result)
+  result
+}
+
+#' Inspect the values a parse could not read
+#'
+#' Returns the record of unrecognised values that [parse_to_datetime()] leaves
+#' on its result, so failures can be inspected or joined back to the source
+#' data rather than only read off a warning. The record is attached whether or
+#' not the warning was emitted, so it survives `quiet = TRUE`.
+#'
+#' @param x A vector returned by [parse_to_datetime()].
+#'
+#' @return A data frame with one row per distinct unparsed value and columns
+#'   `value` (the trimmed input string), `count` (how many times it occurred)
+#'   and `index` (a list column of its positions in the input). Zero rows if
+#'   everything parsed.
+#'
+#' @examples
+#' x <- suppressWarnings(parse_to_datetime(c("2024-01-15", "n/a", "later", "n/a")))
+#' unparsed_values(x)
+#'
+#' # Which input rows failed
+#' unlist(unparsed_values(x)$index)
+#'
+#' @export
+unparsed_values <- function(x) {
+  tbl <- attr(x, "unparsed")
+  if (is.null(tbl)) .empty_unparsed() else tbl
 }

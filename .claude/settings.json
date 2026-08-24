@@ -10,7 +10,11 @@
       "Bash(git diff:*)",
       "Bash(git log:*)",
       "Bash(git add:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(Rscript -e 'devtools::document\\(\\)')",
+      "Bash(Rscript -e 'devtools::test\\(\\)')",
+      "Bash(Rscript -e 'devtools::check\\(document = FALSE, args = \"--no-manual\"\\)')",
+      "Bash(Rscript -e ' *)"
     ],
     "deny": [
       "Bash(git push --force:*)",
